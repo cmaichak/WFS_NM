@@ -16,12 +16,18 @@ library(lubridate)
 library(eeptools)
 library(dplyr)
 library(readxl)
+library(knitr)
+library(kableExtra)
+library(magick)
+library(webshot)
 
 #CLEANING NEW MEXICO DEPARTMENT OF HEALTH HOSPITALIZATION DATA
 
+#Set working directory
+setwd("C://Users//court//Documents//Colorado State University//WFS")
+
 #Read in NM DOH Hospitalization Data
-hospitalization <- read.csv(
-  "C://Users//court//OneDrive//Documents//Colorado State University//WFS//Data//NMDOH_2016-2022//NMDOH_2016-2022.csv") %>%
+hospitalization <- read.csv("Data//NMDOH_2016-2022//NMDOH_2016-2022.csv") %>%
   select("Admission_Date", "Patient_Resi_County_FIPS_Cd", 4,
          "resp_prim", "asthma_prim", "copd_prim", "pneu_prim", "bron_prim",
          "cardio_prim", "cardiac_prim", "arrythmia_prim","heartfail_prim",
@@ -98,7 +104,10 @@ NMDOH_table1 <- hospitalization %>%
             ischemic_dx = sum(ischemic_dx),
             myocardial_dx = sum(myocardial_dx))
 
-#kable(NMDOH_table1)
+kable(NMDOH_table1, "html") %>%
+  kable_styling(latex_options = c("striped","scaled_down")) %>%
+  column_spec(c(2,7), color = "red") %>%
+  save_kable("Outputs//table1.pdf")
 
 #pivot data frame to long format
 NMDOH_long <- hospitalization %>%
@@ -135,15 +144,12 @@ NMDOH_data <- NMDOH_long_bi %>%
   filter(Date > "2016-01-01")
 
 NMDOH_data <- NMDOH_data %>%
-  mutate(Prim_dx=substr(Primary_dx,1,4)) %>% #want to keep this info after pivoting
   pivot_wider(names_from = Primary_dx,
               values_from = Episode)
 
 NMDOH_data <- NMDOH_data %>%
   mutate_if(is.numeric, ~replace(., is.na(.), 0)) %>% #fills in NA values after pivoting dataset
   distinct(Patient_ID,.keep_all=TRUE) #keeps distinctly different observations
-
-#cardiorespiratory_dx <- c(NMDOH$respiratory_dx, NMDOH$cardiovascular_dx)
 
 ###############################################################################
 #Setting up Study
@@ -178,16 +184,16 @@ ref_dates <- ref_dates %>%
 replaceNA <- function(x) (ifelse(is.na(x),0,x))
 NMDOH_full <- bind_rows(NMDOH_data,ref_dates) %>%
   arrange(County,Date) %>%
-  mutate_at(c("asthma_dx","copd_dx","pneumonia_dx","bronchitis_dx",
-              "respiratory_dx","arrythmia_dx","cerebrovascular_dx",
-              "heartfailure_dx","ischemic_dx","myocardial_dx",
-              "cardiovascular_dx"),replaceNA)
+  mutate_at(c("respiratory_dx","asthma_dx","copd_dx","bronchitis_dx",
+              "pneumonia_dx","cardiovascular_dx","arrythmia_dx", 
+              "cardiacarrest_dx","cerebrovascular_dx","heartfailure_dx",
+              "ischemic_dx","myocardial_dx"),replaceNA)
 
 #Join Exposure and Outcome data sets
-full_dataset <- left_join(NMDOH_full,exp_data,by=c("County","Date","quarter"))
+full_dataset <- left_join(NMDOH_full,exp_data,by=c("County","Date"))
 
 #Save and write combined dataset to .csv file
-write_csv(NMDOH_full_dataset,"../clean_data/NMDOH_full_dataset.csv")
+write_csv(NMDOH_full_dataset,"../Clean_Data/NMDOH_full_dataset.csv")
 
 #Create list of casecrossover dataframes
 asthma_full <- full_dataset %>%
