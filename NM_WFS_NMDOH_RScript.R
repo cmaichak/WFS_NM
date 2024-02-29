@@ -12,7 +12,6 @@
 #LIBRARIES
 library(tidyverse)
 library(data.table)
-library(lubridate)
 library(eeptools)
 library(dplyr)
 library(readxl)
@@ -83,7 +82,8 @@ hospitalization <- read.csv("Data//NMDOH_2016-2022//NMDOH_2016-2022.csv") %>%
                          '61' = 'Valencia'))
 
 hospitalization$Date <- dmy(hospitalization$Date) #converts date to correct format 
-#hospitalization$Date <- as.Date(hospitalization$Date)
+hospitalization$Date <- as.Date(hospitalization$Date)
+hospitalization$Date <- ymd(hospitalization$Date)
 
 hospitalization <- hospitalization %>%
   mutate(Year = format(hospitalization$Date, "%Y"))
@@ -106,8 +106,8 @@ NMDOH_table1 <- hospitalization %>%
 
 kable(NMDOH_table1, "html") %>%
   kable_styling(latex_options = c("striped","scaled_down")) %>%
-  column_spec(c(2,7), color = "red") %>%
-  save_kable("Outputs//table1.pdf")
+  column_spec(c(2,7), color = "red") 
+  #save_kable("Outputs//table1.pdf") will not save properly
 
 #pivot data frame to long format
 NMDOH_long <- hospitalization %>%
@@ -118,13 +118,13 @@ NMDOH_long <- hospitalization %>%
 #create graphs showing daily change for 2016-2020
 (NMDOH_figure1 <- ggplot(NMDOH_long) +
     geom_line(aes(x = Date, y = Count)) +
-    facet_wrap(~factor(Primary_dx, levels = c('respiratory_dx', 'asthma_dx',
+    facet_wrap(~factor(Primary_dx, levels = c('respiratory_dx','asthma_dx',
                                               'bronchitis_dx','copd_dx',
                                               'pneumonia_dx',   
                                               'cardiovascular_dx','arrythmia_dx',
                                               'cardiacarrest_dx',
                                               'cerebrovascular_dx',
-                                              'heartfailure_dx', 'ischemic_dx',
+                                              'heartfailure_dx','ischemic_dx',
                                               'myocardial_dx')), ncol = 3))
 
 #Create single observation for each count of Primary_dx 
@@ -162,10 +162,20 @@ funlag <- function(var, n=6){
     set_names(sprintf("%s_lag%d", rlang::quo_text(var), indices))
 }
 
-#exp_data <- exp_data %>%
-  #group_by(County) %>%
-  #mutate(., !!!funlag(mean_relh,5),!!!funlag(mean_tmpf,5), 
-         #!!!funlag(max_tmpf,5),!!!funlag(ARITHMETIC.MEAN,5))
+exp_data <- read.csv("Data//AllCountySmoke_Total//AllCountySmoke_Total.csv") %>%
+  mutate(County = recode(County,
+         "Doña Ana" = "Dona Ana")) #remove tilde and match with outcome data
+
+  
+exp_data$Date <- mdy(exp_data$Date)  
+exp_data$Date <- as.Date(exp_data$Date)
+exp_data$Date <- ymd(exp_data$Date)
+
+exp_data <- exp_data %>%
+  group_by(County) %>%
+  mutate(., !!!funlag(smokepm25,5),!!!funlag(totalpm25,5)) %>%
+  select(2:14)
+         #,!!!funlag(max_tmpf,5),!!!funlag(ARITHMETIC.MEAN,5))
 
 ###############################################################################
 #Creating Case-CrossOver Dataset
@@ -183,17 +193,19 @@ ref_dates <- ref_dates %>%
 
 replaceNA <- function(x) (ifelse(is.na(x),0,x))
 NMDOH_full <- bind_rows(NMDOH_data,ref_dates) %>%
-  arrange(County,Date) %>%
+  arrange(Date, County) %>%
+  select(1,3:16) %>%
   mutate_at(c("respiratory_dx","asthma_dx","copd_dx","bronchitis_dx",
-              "pneumonia_dx","cardiovascular_dx","arrythmia_dx", 
+              "pneumonia_dx","cardiovascular_dx","arrythmia_dx",
               "cardiacarrest_dx","cerebrovascular_dx","heartfailure_dx",
               "ischemic_dx","myocardial_dx"),replaceNA)
 
 #Join Exposure and Outcome data sets
-full_dataset <- left_join(NMDOH_full,exp_data,by=c("County","Date"))
+full_dataset <- inner_join(NMDOH_full,exp_data,
+                          by=c("Date", "County")) #did not like left_join
 
 #Save and write combined dataset to .csv file
-write_csv(NMDOH_full_dataset,"../Clean_Data/NMDOH_full_dataset.csv")
+write_csv(full_dataset,"Data//Clean_Data//NMDOH_full_dataset.csv")
 
 #Create list of casecrossover dataframes
 asthma_full <- full_dataset %>%
@@ -277,7 +289,7 @@ cardiovascular_full <- full_dataset %>%
 casecross_list <- list(asthma_full,copd_full,pneumonia_full,bronchitis_full,
                        respiratory_full,arrhythmia_full,cerebrovascular_full,
                        ischemic_full,myocardial_full,heartfailure_full,
-                       cardiovascular_full,cardiorespiratory_full)
+                       cardiovascular_full)
 
 #Save the crasscross_list object as a .rds file
-saveRDS(casecross_list,"../Clean_Data/casecross_list.rds")
+saveRDS(casecross_list,"Data//Clean_Data//casecross_list.rds")
