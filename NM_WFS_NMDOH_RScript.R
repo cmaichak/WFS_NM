@@ -47,7 +47,7 @@ hospitalization <- read.csv("Data//NMDOH_2016-2022//NMDOH_2016-2022.csv") %>%
          "myocardial_dx" = "mi_prim", 
          "cerebrovascular_dx" = "cerebro_prim") %>%
   mutate(County = recode(County, 
-                         '1' = 'Bernilillo',
+                         '1' = 'Bernalillo',
                          '3' = 'Catron',
                          '5' = 'Chaves',
                          '6' = 'Cibola',
@@ -79,16 +79,17 @@ hospitalization <- read.csv("Data//NMDOH_2016-2022//NMDOH_2016-2022.csv") %>%
                          '55' = 'Taos',
                          '57' = 'Torrance',
                          '59' = 'Union',
-                         '61' = 'Valencia'))
+                         '61' = 'Valencia')) 
 
-hospitalization$Date <- dmy(hospitalization$Date) #converts date to correct format 
-hospitalization$Date <- as.Date(hospitalization$Date)
-hospitalization$Date <- ymd(hospitalization$Date)
+
+
+#Convert Date from "01JAN2016" format to "2016-01-01"
+hospitalization$Date <- as.Date(dmy(hospitalization$Date))
 
 hospitalization <- hospitalization %>%
   mutate(Year = format(hospitalization$Date, "%Y"))
 
-#create annual summary table
+#Create annual summary table
 NMDOH_table1 <- hospitalization %>%
   group_by(Year) %>%
   summarise(respiratory_dx = sum(respiratory_dx), 
@@ -116,7 +117,7 @@ NMDOH_long <- hospitalization %>%
                values_to = "Count")
 
 #create graphs showing daily change for 2016-2020
-(NMDOH_figure1 <- ggplot(NMDOH_long) +
+NMDOH_figure1 <- ggplot(NMDOH_long) +
     geom_line(aes(x = Date, y = Count)) +
     facet_wrap(~factor(Primary_dx, levels = c('respiratory_dx','asthma_dx',
                                               'bronchitis_dx','copd_dx',
@@ -125,7 +126,7 @@ NMDOH_long <- hospitalization %>%
                                               'cardiacarrest_dx',
                                               'cerebrovascular_dx',
                                               'heartfailure_dx','ischemic_dx',
-                                              'myocardial_dx')), ncol = 3))
+                                              'myocardial_dx')), ncol = 3)
 
 #Create single observation for each count of Primary_dx 
 #runs line by line, does not like mutate "Patient_ID"              
@@ -165,16 +166,14 @@ funlag <- function(var, n=6){
 exp_data <- read.csv("Data//AllCountySmoke_Total//AllCountySmoke_Total.csv") %>%
   mutate(County = recode(County,
          "Doña Ana" = "Dona Ana")) #remove tilde and match with outcome data
-
   
 exp_data$Date <- mdy(exp_data$Date)  
-exp_data$Date <- as.Date(exp_data$Date)
-exp_data$Date <- ymd(exp_data$Date)
 
+#join datasets and run lag function after
 exp_data <- exp_data %>%
   group_by(County) %>%
   mutate(., !!!funlag(smokepm25,5),!!!funlag(totalpm25,5)) %>%
-  select(2:14)
+  select(2:15)
          #,!!!funlag(max_tmpf,5),!!!funlag(ARITHMETIC.MEAN,5))
 
 ###############################################################################
@@ -201,8 +200,8 @@ NMDOH_full <- bind_rows(NMDOH_data,ref_dates) %>%
               "ischemic_dx","myocardial_dx"),replaceNA)
 
 #Join Exposure and Outcome data sets
-full_dataset <- inner_join(NMDOH_full,exp_data,
-                          by=c("Date", "County")) #did not like left_join
+full_dataset <- left_join(NMDOH_full, exp_data,
+                          by = c("County", "Date")) #did not like left_join
 
 #Save and write combined dataset to .csv file
 write_csv(full_dataset,"Data//Clean_Data//NMDOH_full_dataset.csv")
@@ -243,13 +242,20 @@ respiratory_full <- full_dataset %>%
   select(-n) %>%
   rename(outcome=respiratory_dx) %>%
   mutate(out_name="respiratory")
-arrhythmia_full <- full_dataset %>%
+arrythmia_full <- full_dataset %>%
   group_by(Patient_ID) %>%
   mutate(n=length(unique(arrythmia_dx))) %>%
   filter(n==2) %>%
   select(-n) %>%
   rename(outcome=arrythmia_dx) %>%
-  mutate(out_name="arrhythmia")
+  mutate(out_name="arrythmia")
+cardiacarrest_full <- full_dataset %>%
+  group_by(Patient_ID) %>%
+  mutate(n=length(unique(cardiacarrest_dx))) %>%
+  filter(n==2) %>%
+  select(-n) %>%
+  rename(outcome=cardiacarrest_dx) %>%
+  mutate(out_name="cardiacarrest")
 cerebrovascular_full <- full_dataset %>%
   group_by(Patient_ID) %>%
   mutate(n=length(unique(cerebrovascular_dx))) %>%
@@ -286,9 +292,10 @@ cardiovascular_full <- full_dataset %>%
   rename(outcome=cardiovascular_dx) %>%
   mutate(out_name="cardiovascular")
 
-casecross_list <- list(asthma_full,copd_full,pneumonia_full,bronchitis_full,
-                       respiratory_full,arrhythmia_full,cerebrovascular_full,
-                       ischemic_full,myocardial_full,heartfailure_full,
+casecross_list <- list(asthma_full,bronchitis_full,copd_full,pneumonia_full,
+                       respiratory_full,arrythmia_full,cardiacarrest_full,
+                       cerebrovascular_full,heartfailure_full,
+                       ischemic_full,myocardial_full,
                        cardiovascular_full)
 
 #Save the crasscross_list object as a .rds file
