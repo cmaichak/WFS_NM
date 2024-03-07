@@ -8,13 +8,13 @@ library(data.table)
 library(eeptools)
 library(dplyr)
 library(readxl)
-library(knitr)
-library(kableExtra)
-library(magick)
-library(webshot)
+#library(knitr)
+#library(kableExtra)
+#library(magick)
+#library(webshot)
 
 #Set working directory
-setwd("C://Users//court//Documents//Colorado State University//WFS")
+setwd("D://Colorado State University//WFS")
 
 ###############################################################################
 ############################# READ AND CLEAN DATA #############################
@@ -79,14 +79,6 @@ NMDOH_hospitalization <- read.csv("Data//NMDOH_2016-2022//NMDOH_2016-2022.csv") 
 #Convert Date from "01JAN2016" format to "2016-01-01"
 NMDOH_hospitalization$Date <- as.Date(dmy(NMDOH_hospitalization$Date))
 
-#Read in population weighted PM2.5 exposure data
-exp_data <- read.csv("Data//AllCountySmoke_Total//AllCountySmoke_Total.csv") %>%
-  select("Date", "County", "smokepm25", "totalpm25")
-  
-
-#Convert dates from character to Date class
-exp_data$Date <- mdy(exp_data$Date)  
-
 ###############################################################################
 ################## CREATE PATIENT IDs & MONTH/YEAR COLUMNS #####################
 ###############################################################################
@@ -128,29 +120,42 @@ NMDOH_data <- NMDOH_wide %>%
 
 
 NMWFS_data <- NMDOH_data %>%
-  filter(grepl("-04-|-05-|-06-|-07-|-08-", Date)) %>% #fire months (Apr.-Aug.)
   filter(Date > "2016-01-01")
+ # filter(grepl("-04-|-05-|-06-|-07-|-08-", Date)) %>% #fire months (Apr.-Aug.)
 
 #Creating Case-Crossover Dataset
-dates <- NMWFS_data[,c(1:5)]
+dates <- NMWFS_data[,c(1:5)] #Date, Year, Month, County, Patient_ID
 
 dates <- dates[rep(seq_len(nrow(dates)), each = 53), ]
 dates$index <- rep(-26:26,nrow(dates)/53)
 ref_dates <- dates %>%
   mutate(Date=Date+(index*7)) %>%
-  filter(grepl("-04-|-05-|-06-|-07-|-08-", Date)) %>% #fire months (Apr.-Aug.)
   filter(Date>"2016-01-01")
+ # filter(grepl("-04-|-05-|-06-|-07-|-08-", Date)) %>% #fire months (Apr.-Aug.)
 ref_dates <- ref_dates %>%
   filter(index!=0) %>%
   select(-index)
 
 replaceNA <- function(x) (ifelse(is.na(x),0,x))
-NMWFS_data <- bind_rows(NMWFS_data, ref_dates) %>%
+
+NMWFS_data <- bind_rows(NMDOH_data, ref_dates) %>%
   arrange(Date, County) %>%
   mutate_at(c("respiratory_dx","asthma_dx","copd_dx","bronchitis_dx",
               "pneumonia_dx","cardiovascular_dx","arrythmia_dx",
               "cardiacarrest_dx","cerebrovascular_dx","heartfailure_dx",
               "ischemic_dx","myocardial_dx"), replaceNA)
+
+################################################################################
+######################### READ IN EXPOSURE DATA ################################
+################################################################################
+
+#Read in population weighted PM2.5 exposure data
+exp_data <- read.csv("Data//AllCountySmoke_Total//AllCountySmoke_Total.csv") %>%
+  select("Date", "County", "smokepm25", "totalpm25")
+
+
+#Convert dates from character to Date class
+exp_data$Date <- mdy(exp_data$Date) 
 
 ###############################################################################
 ###################### CREATING LAG FUNCTION FOR EXPOSURES ####################
