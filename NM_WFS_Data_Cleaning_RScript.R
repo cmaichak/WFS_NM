@@ -4,6 +4,7 @@
 
 #LIBRARIES
 library(tidyverse)
+library(lubridate)
 library(data.table)
 library(eeptools)
 library(dplyr)
@@ -149,6 +150,8 @@ NMWFS_data <- bind_rows(NMDOH_data, ref_dates) %>%
 ######################### READ IN EXPOSURE DATA ################################
 ################################################################################
 
+#PM2.5 Data
+
 #Read in population weighted PM2.5 exposure data
 exp_data <- read.csv("Data//AllCountySmoke_Total//AllCountySmoke_Total.csv") %>%
   select("Date", "County", "smokepm25", "totalpm25")
@@ -156,6 +159,61 @@ exp_data <- read.csv("Data//AllCountySmoke_Total//AllCountySmoke_Total.csv") %>%
 
 #Convert dates from character to Date class
 exp_data$Date <- mdy(exp_data$Date) 
+
+#Heat Index Data
+
+#Read in populaiton weighted Heat Index exposure data
+HI <- read_csv("D://Colorado State University//WFS//Data//HI_PopWeighted//max_HI_county_pop_weighted.csv")
+
+#Clean data
+HI <- HI %>%
+  select(2:2559) %>%
+  mutate(county = recode(county, 
+                         '35001' = 'Bernalillo',
+                         '35003' = 'Catron',
+                         '35005' = 'Chaves',
+                         '35006' = 'Cibola',
+                         '35007' = 'Colfax',
+                         '35009' = 'Curry',
+                         '35011' = 'De Baca',
+                         '35013' = 'Doña Ana',
+                         '35015' = 'Eddy',
+                         '35017' = 'Grant',
+                         '35019' = 'Guadalupe',
+                         '35021' = 'Harding',
+                         '35023' = 'Hidalgo',
+                         '35025' = 'Lea',
+                         '35027' = 'Lincoln',
+                         '35028' = 'Los Alamos',
+                         '35029' = 'Luna',
+                         '35031' = 'McKinley',
+                         '35033' = 'Mora',
+                         '35035' = 'Otero',
+                         '35037' = 'Quay',
+                         '35039' = 'Rio Arriba',
+                         '35041' = 'Roosevelt',
+                         '35043' = 'Sandoval',
+                         '35045' = 'San Juan',
+                         '35047' = 'San Miguel',
+                         '35049' = 'Santa Fe',
+                         '35051' = 'Sierra',
+                         '35053' = 'Socorro',
+                         '35055' = 'Taos',
+                         '35057' = 'Torrance',
+                         '35059' = 'Union',
+                         '35061' = 'Valencia'))
+
+#Pivot to workable format, and joining data to hospitalization
+HI <- HI %>%
+  pivot_longer(cols = 2:2558,
+               names_to = "Date",
+               values_to = "HI")
+
+#convert column from character to numeric
+HI$Date <- as.numeric(HI$Date)
+
+#Convert date from unix format to date YYYY-MM-DD
+HI$Date <- as_date(HI$Date)
 
 ###############################################################################
 ###################### CREATING LAG FUNCTION FOR EXPOSURES ####################
