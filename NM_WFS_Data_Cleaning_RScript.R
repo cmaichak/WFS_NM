@@ -119,10 +119,10 @@ NMDOH_data <- NMDOH_wide %>%
 ############################ CASE-CROSSOVER SETUP #############################
 ###############################################################################
 
-
+#Filter out study period of interest
 NMWFS_data <- NMDOH_data %>%
-  filter(Date > "2016-01-01")
- # filter(grepl("-04-|-05-|-06-|-07-|-08-", Date)) %>% #fire months (Apr.-Aug.)
+  filter(Date > "2016-01-01") %>%
+  filter(grepl("-04-|-05-|-06-|-07-|-08-", Date)) #fire months (Apr.-Aug.)
 
 #Creating Case-Crossover Dataset
 dates <- NMWFS_data[,c(1:5)] #Date, Year, Month, County, Patient_ID
@@ -131,8 +131,8 @@ dates <- dates[rep(seq_len(nrow(dates)), each = 53), ]
 dates$index <- rep(-26:26,nrow(dates)/53)
 ref_dates <- dates %>%
   mutate(Date=Date+(index*7)) %>%
-  filter(Date>"2016-01-01")
- # filter(grepl("-04-|-05-|-06-|-07-|-08-", Date)) %>% #fire months (Apr.-Aug.)
+  filter(Date>"2016-01-01") %>%
+  filter(grepl("-04-|-05-|-06-|-07-|-08-", Date)) #fire months (Apr.-Aug.)
 ref_dates <- ref_dates %>%
   filter(index!=0) %>%
   select(-index)
@@ -153,20 +153,20 @@ NMWFS_data <- bind_rows(NMDOH_data, ref_dates) %>%
 #PM2.5 Data
 
 #Read in population weighted PM2.5 exposure data
-exp_data <- read.csv("Data//AllCountySmoke_Total//AllCountySmoke_Total.csv") %>%
+PM_data <- read.csv("Data//AllCountySmoke_Total//AllCountySmoke_Total.csv") %>%
   select("Date", "County", "smokepm25", "totalpm25")
 
 
 #Convert dates from character to Date class
-exp_data$Date <- mdy(exp_data$Date) 
+PM_data$Date <- mdy(PM_data$Date) 
 
 #Heat Index Data
 
 #Read in populaiton weighted Heat Index exposure data
-HI <- read_csv("D://Colorado State University//WFS//Data//HI_PopWeighted//max_HI_county_pop_weighted.csv")
+HI_data <- read_csv("D://Colorado State University//WFS//Data//HI_PopWeighted//max_HI_county_pop_weighted.csv")
 
-#Clean data
-HI <- HI %>%
+#Clean HI data
+HI_data <- HI_data %>%
   select(2:2559) %>%
   mutate(county = recode(county, 
                          '35001' = 'Bernalillo',
@@ -201,19 +201,20 @@ HI <- HI %>%
                          '35055' = 'Taos',
                          '35057' = 'Torrance',
                          '35059' = 'Union',
-                         '35061' = 'Valencia'))
+                         '35061' = 'Valencia')) %>%
+  rename("County" = "county")
 
 #Pivot to workable format, and joining data to hospitalization
-HI <- HI %>%
+HI_data <- HI_data %>%
   pivot_longer(cols = 2:2558,
                names_to = "Date",
                values_to = "HI")
 
 #convert column from character to numeric
-HI$Date <- as.numeric(HI$Date)
+HI_data$Date <- as.numeric(HI_data$Date)
 
 #Convert date from unix format to date YYYY-MM-DD
-HI$Date <- as_date(HI$Date)
+HI_data$Date <- as_date(HI_data$Date)
 
 ###############################################################################
 ###################### CREATING LAG FUNCTION FOR EXPOSURES ####################
@@ -227,11 +228,13 @@ funlag <- function(var, n=6){
     set_names(sprintf("%s_lag%d", rlang::quo_text(var), indices))
 }
 
-#Run lag function for fire dataset on exposure data
+exp_data <- left_join(PM_data, HI_data,
+                      by = c("Date", "County"))
+
+#Run 5-day lag function on exposure data
 exp_data <- exp_data %>%
   group_by(County) %>%
-  mutate(., !!!funlag(smokepm25,5),!!!funlag(totalpm25,5))
-#,!!!funlag(max_tmpf,5),!!!funlag(ARITHMETIC.MEAN,5))
+  mutate(., !!!funlag(smokepm25,5),!!!funlag(totalpm25,5),!!!funlag(HI,5))
 
 ###############################################################################
 ###################### JOIN EXPOSURE AND OUTCOME DATASETS #####################
@@ -245,8 +248,8 @@ full_dataset <- left_join(NMWFS_data, exp_data,
 ##################### SAVE CLEANED DATASETS AS .CSV FILES ######################
 ################################################################################
 
-#Save and write combined fire dataset to .csv file
-write_csv(full_dataset,"Data//Clean_Data//full_dataset.csv")
+#Save and write combined fire season dataset to .csv file
+write_csv(full_dataset,"Data//Clean_Data//full_dataset_fire.csv")
 
 ################################################################################
 ######################## CREATE CASE-CROSSOVER LISTS ###########################
