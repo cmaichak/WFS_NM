@@ -22,7 +22,7 @@ setwd("D://Colorado State University//WFS")
 ###############################################################################
 
 #Read in New Mexico Department of Health Hospitalization Data
-NMDOH_hospitalization <- read.csv("Data//NMDOH_2016-2022//NMDOH_2016-2022.csv") %>%
+NMDOH_hospitalization <- read.csv("Data//NMDOH_2016-2022//NMDOH_2016-2022_v2.csv") %>%
   select("Admission_Date", "Patient_Resi_County_FIPS_Cd", 4,
          "resp_prim", "asthma_prim", "copd_prim", "pneu_prim", "bron_prim",
          "cardio_prim", "cardiac_prim", "arrythmia_prim","heartfail_prim",
@@ -91,7 +91,6 @@ NMDOH_long <- NMDOH_hospitalization %>%
                values_to = "Count")
 
 #Create single observation for each count of Primary_dx, creating unique identifier
-#runs line by line, does not like mutate "Patient_ID"              
 NMDOH_long_bi <- NMDOH_long %>%
   uncount(., Count) %>% #spreads count for each dx and makes multiple individual observations
   mutate(Patient_DX = substr(Primary_dx, 1,4)) %>%
@@ -121,8 +120,9 @@ NMDOH_data <- NMDOH_wide %>%
 
 #Filter out study period of interest
 NMWFS_data <- NMDOH_data %>%
-  filter(Date > "2016-01-01") %>%
-  filter(grepl("-04-|-05-|-06-|-07-|-08-", Date)) #fire months (Apr.-Aug.)
+  filter(grepl("-04-|-05-|-06-|-07-|-08-|-09-", Date)) %>% #Fire months (Apr-Aug)
+  #filter(grepl("-01-|-02-|-03-|-10-|-11-|-12-", Date)) %>% #Non-fire
+  filter(Date > "2016-01-01")
 
 #Creating Case-Crossover Dataset
 dates <- NMWFS_data[,c(1:5)] #Date, Year, Month, County, Patient_ID
@@ -131,15 +131,16 @@ dates <- dates[rep(seq_len(nrow(dates)), each = 53), ]
 dates$index <- rep(-26:26,nrow(dates)/53)
 ref_dates <- dates %>%
   mutate(Date=Date+(index*7)) %>%
-  filter(Date>"2016-01-01") %>%
-  filter(grepl("-04-|-05-|-06-|-07-|-08-", Date)) #fire months (Apr.-Aug.)
+  filter(grepl("-04-|-05-|-06-|-07-|-08-|-09-", Date)) %>% #fire months (Apr.-Aug.)
+  #filter(grepl("-01-|-02-|-03-|-10-|-11-|-12-", Date)) %>%
+  filter(Date>"2016-01-01") 
 ref_dates <- ref_dates %>%
   filter(index!=0) %>%
   select(-index)
 
 replaceNA <- function(x) (ifelse(is.na(x),0,x))
 
-NMWFS_data <- bind_rows(NMDOH_data, ref_dates) %>%
+NMWFS_data <- bind_rows(NMWFS_data, ref_dates) %>%
   arrange(Date, County) %>%
   mutate_at(c("respiratory_dx","asthma_dx","copd_dx","bronchitis_dx",
               "pneumonia_dx","cardiovascular_dx","arrythmia_dx",
@@ -153,12 +154,27 @@ NMWFS_data <- bind_rows(NMDOH_data, ref_dates) %>%
 #PM2.5 Data
 
 #Read in population weighted PM2.5 exposure data
-PM_data <- read.csv("Data//AllCountySmoke_Total//AllCountySmoke_Total.csv") %>%
+PM_data <- read.csv("Data//AllCountySmoke_Total//AllCountySmoke_KO_2016-2022.csv") %>%
   select("Date", "County", "smokepm25", "totalpm25")
 
 
 #Convert dates from character to Date class
-PM_data$Date <- mdy(PM_data$Date) 
+PM_data$Date <- ymd(PM_data$Date) 
+
+#PM_data <- PM_data %>%
+#  mutate(Year = format(PM_data$Date, "%Y"),
+#         Month = format(PM_data$Date, "%m"))
+
+
+#PM_data %>%
+#  group_by(Date) %>%
+#  ggplot(aes(x = Date, y = smokepm25)) +
+#  geom_point() +
+#  geom_smooth(color = "red", linewidth = 0.7) +
+#  facet_wrap(~Year, scales = "free") +
+#  ylab("Smoke PM2.5") +
+#  xlab("Date")
+  
 
 #Heat Index Data
 
@@ -208,7 +224,7 @@ HI_data <- HI_data %>%
 HI_data <- HI_data %>%
   pivot_longer(cols = 2:2558,
                names_to = "Date",
-               values_to = "HI")
+               values_to = "HeatIndex")
 
 #convert column from character to numeric
 HI_data$Date <- as.numeric(HI_data$Date)
@@ -234,7 +250,7 @@ exp_data <- left_join(PM_data, HI_data,
 #Run 5-day lag function on exposure data
 exp_data <- exp_data %>%
   group_by(County) %>%
-  mutate(., !!!funlag(smokepm25,5),!!!funlag(totalpm25,5),!!!funlag(HI,5))
+  mutate(., !!!funlag(smokepm25,5),!!!funlag(totalpm25,5),!!!funlag(HeatIndex,5))
 
 ###############################################################################
 ###################### JOIN EXPOSURE AND OUTCOME DATASETS #####################
@@ -249,7 +265,7 @@ full_dataset <- left_join(NMWFS_data, exp_data,
 ################################################################################
 
 #Save and write combined fire season dataset to .csv file
-write_csv(full_dataset,"Data//Clean_Data//full_dataset_fire.csv")
+write_csv(full_dataset,"Data//Clean_Data//full_dataset.csv")
 
 ################################################################################
 ######################## CREATE CASE-CROSSOVER LISTS ###########################
